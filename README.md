@@ -110,6 +110,38 @@ ngrok http 3000
 Pon la URL pública resultante en `APP_URL` y vuelve a publicar el agente para que
 el asistente apunte al túnel nuevo.
 
+## Cómo funciona una llamada
+
+1. El paciente marca el número de la clínica. Vapi enruta la llamada al asistente
+   de esa clínica y este saluda con el mensaje configurado.
+2. Cuando el paciente pide cita, el asistente llama a `checkAvailability`. El
+   webhook resuelve a qué clínica pertenece la llamada por `assistantId`, cruza
+   el `freebusy` de Google con las citas ya registradas y devuelve los huecos
+   **ya verbalizados en español**.
+3. El paciente elige una hora, el asistente confirma los datos en voz alta y
+   llama a `bookAppointment`. La cita se escribe primero en la base de datos y
+   después en Google Calendar: si Google falla, la cita no se pierde.
+4. El asistente dicta un código de seis caracteres. Ese código es lo que permite
+   luego buscar y cancelar la cita por teléfono, sin que nadie tenga que dictar
+   un identificador de Google.
+5. Al colgar, Vapi envía el reporte de fin de llamada y quedan guardados la
+   transcripción turno por turno, el resumen, la duración y el coste.
+
+El agente nunca calcula fechas. Si el paciente dice «el próximo martes», esa
+expresión se pasa tal cual al servidor, que la resuelve en la zona horaria de la
+clínica y devuelve la fecha ya escrita. Sacar la aritmética temporal del modelo
+es lo que evita las citas fantasma.
+
+## Las cinco vistas
+
+| Vista | Qué muestra |
+|---|---|
+| **Panel** | Llamadas y citas de los últimos 7 días, duración media, tasa de agendado, gráfica diaria y estado de las integraciones |
+| **Calendario** | Semana con las citas del agente y los eventos de Google Calendar mezclados; los externos se marcan como tales |
+| **Transcripciones** | Búsqueda y filtros por fecha y por resultado; detalle con la conversación, el resumen, la grabación y la cita generada |
+| **Personalización** | Guion, tratamientos con su duración, horarios por día, voz, modelo y reglas de agenda, con el botón de publicar |
+| **Integraciones** | Conexión de Google, asistente y número de Vapi, y estado del webhook |
+
 ## Comandos
 
 | Comando | Qué hace |

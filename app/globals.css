@@ -26,6 +26,13 @@
   --color-peligro: #b91c1c;
   --color-peligro-suave: #fee2e2;
 
+  /* Series de las gráficas. Orden fijo: la serie 1 es siempre "llamadas".
+     Validadas con el verificador de paletas: banda de luminosidad, suelo de
+     croma, separación para daltonismo (ΔE 13.7 deutan, 32.5 tritan), suelo de
+     visión normal (27.1) y contraste sobre la superficie. */
+  --color-serie-1: #0d9488;
+  --color-serie-2: #c2410c;
+
   --radius-panel: 0.75rem;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

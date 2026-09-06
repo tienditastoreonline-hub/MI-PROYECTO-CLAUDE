@@ -122,7 +122,11 @@ begin
         'voice',
         case when i % 4 = 0 then 'Primera visita.' else null end
       )
-      on conflict on constraint appointments_no_overlap do nothing;
+      -- `ON CONFLICT ON CONSTRAINT` exige una constraint ÚNICA; nombrar aquí la
+      -- exclusion constraint sería un error. La forma sin destino sí cubre las
+      -- violaciones de exclusión, que es justo lo que puede pasar al generar
+      -- citas de demo en huecos solapados.
+      on conflict do nothing;
     end if;
   end loop;
 
