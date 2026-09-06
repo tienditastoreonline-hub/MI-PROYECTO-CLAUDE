@@ -9,6 +9,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 
 import { DesconectarGoogle } from '@/app/(app)/integraciones/_components/desconectar-google';
+import { NumeroVapi } from '@/app/(app)/integraciones/_components/numero-vapi';
 import { Badge, Card, CardBody, CardHeader, cx } from '@/components/ui';
 import { getAgentConfig, requireClinic } from '@/lib/auth/tenant';
 import { fechaHoraLarga } from '@/lib/format/es';
@@ -143,19 +144,23 @@ export default async function IntegracionesPage({
             mono={Boolean(estado.vapi.assistantId)}
           />
           <Fila
-            etiqueta="Número de teléfono"
-            valor={
-              estado.vapi.phoneNumberId ??
-              'Sin asignar. Compra un número en Vapi y guarda su identificador en la clínica.'
-            }
-            mono={Boolean(estado.vapi.phoneNumberId)}
-          />
-          <Fila
             etiqueta="Última publicación"
             valor={
               estado.vapi.publicadoEn ? fechaHoraLarga(estado.vapi.publicadoEn, clinic.timezone) : 'Nunca'
             }
           />
+
+          <div className="border-t border-borde pt-3">
+            {esOwner ? (
+              <NumeroVapi valorActual={estado.vapi.phoneNumberId} />
+            ) : (
+              <Fila
+                etiqueta="Número de teléfono"
+                valor={estado.vapi.phoneNumberId ?? 'Sin asignar'}
+                mono={Boolean(estado.vapi.phoneNumberId)}
+              />
+            )}
+          </div>
 
           {estado.vapi.assistantId && !estado.vapi.phoneNumberId ? (
             <p className="rounded-panel border border-aviso/20 bg-aviso-suave px-3 py-2 text-xs text-aviso">
