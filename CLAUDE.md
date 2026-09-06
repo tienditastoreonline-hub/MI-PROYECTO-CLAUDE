@@ -23,10 +23,14 @@ comprueba. Ninguna consulta puede devolver datos de otra clínica.
 
 - En vistas y Server Actions se usa `lib/supabase/server.ts`, que pasa por RLS.
 - `lib/supabase/admin.ts` (service_role) **ignora la RLS** y existe solo para el
-  webhook de Vapi, que llega sin cookie. Todo acceso desde ahí va por
-  `scopedRepo(clinicId)`: es el único módulo que hay que auditar para saber que
-  no se cruzan datos.
-- Nunca uses el cliente admin en una página ni en una Server Action.
+  webhook de Vapi y el callback de OAuth, que llegan sin cookie de sesión. Todo
+  acceso desde ahí va por `scopedRepo(clinicId)`: es el único módulo que hay que
+  auditar para saber que no se cruzan datos.
+- Nunca uses el cliente admin en una página ni en una Server Action. Cuando una
+  tabla guarde secretos que el panel necesite *resumir* pero no leer, la salida
+  no es el cliente admin: es RLS para las filas más privilegios por columna para
+  los campos, como en `google_credentials` (el panel ve `google_email` y
+  `revoked_at`; `refresh_token_enc` ni siquiera es seleccionable).
 
 ### Secretos
 

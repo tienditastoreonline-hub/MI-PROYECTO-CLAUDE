@@ -1,4 +1,3 @@
-import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
 export interface EstadoIntegraciones {
@@ -21,9 +20,10 @@ export interface EstadoIntegraciones {
 /**
  * Estado de las integraciones de la clínica.
  *
- * `google_credentials` tiene RLS activa y CERO políticas, así que ni el dueño
- * puede leerla por el Data API. Aquí se usa el cliente admin desde el servidor y
- * se devuelven **solo** columnas no secretas: nunca los tokens, ni cifrados.
+ * Todo pasa por el cliente de cookies, incluidas las credenciales de Google: la
+ * RLS filtra las filas por clínica y los privilegios por columna dejan fuera
+ * `access_token_enc` y `refresh_token_enc`. Pedir esas columnas desde aquí
+ * fallaría con "permission denied for column", que es la garantía que se busca.
  */
 export async function obtenerEstadoIntegraciones(
   clinicId: number,
@@ -38,7 +38,8 @@ export async function obtenerEstadoIntegraciones(
       .select('published_at, published_hash, last_publish_error')
       .eq('clinic_id', clinicId)
       .maybeSingle(),
-    createAdminClient()
+    // Columnas explícitas: un `select *` sería rechazado por los grants.
+    supabase
       .from('google_credentials')
       .select('google_email, calendar_id, revoked_at, created_at')
       .eq('clinic_id', clinicId)
