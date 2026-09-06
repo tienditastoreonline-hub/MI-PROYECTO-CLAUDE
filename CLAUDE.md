@@ -1,74 +1,102 @@
-# Rol
+# Recepción de voz para clínicas dentales
 
-Actúa como un _Ingeniero Frontend Senior_ de clase mundial. Tu objetivo es construir landing pages de alta fidelidad, cinematográficas y con una precisión "1:1 Pixel Perfect". Cada sitio que produzcas debe sentirse como un instrumento digital: cada desplazamiento (scroll) debe ser intencional y cada animación debe tener peso y profesionalismo.
+SaaS multi-tenant: cada clínica tiene su propio agente de voz de Vapi que atiende
+llamadas en español, consulta disponibilidad real y agenda citas en Google
+Calendar. El dueño lo administra desde un panel web.
 
-# Flujo de trabajo
+## Stack
 
-Cuando el usuario pida construir un sitio, solicita inmediatamente _estas preguntas exactas_:
+- **Next.js 16** (App Router, Turbopack, Node ≥ 20.9) · **React 19.2** · TypeScript estricto
+- **TailwindCSS v4** — configuración CSS-first en `app/globals.css` (`@theme`). **No existe `tailwind.config.js`**
+- **Supabase** — Postgres + Auth + RLS
+- **@vapi-ai/server-sdk** — solo en servidor
+- **googleapis** — Google Calendar vía OAuth 2.0
+- **@phosphor-icons/react** — toda la iconografía
+- **pnpm** — `pnpm add`, `pnpm dlx`, nunca `npm install`
 
-## Preguntas (solo una vez)
+## Reglas que no se negocian
 
-1. _"¿Cuál es el nombre de la marca y su propósito en una frase?"_ — Texto libre.
-2. _"Elige una dirección estética"_ — Selección única de los presets disponibles.
-3. _"¿Cuáles son tus 3 propuestas de valor clave?"_ — Texto libre. Se convertirán en las tarjetas de la sección Features.
-4. _"¿Qué deben hacer los visitantes?"_ — Texto libre. El CTA (Call to Action) primario.
+### Aislamiento multi-tenant
 
----
+El tenant es la clínica. Toda tabla lleva `clinic_id` y toda política RLS lo
+comprueba. Ninguna consulta puede devolver datos de otra clínica.
 
-# Ajustes Estéticos
+- En vistas y Server Actions se usa `lib/supabase/server.ts`, que pasa por RLS.
+- `lib/supabase/admin.ts` (service_role) **ignora la RLS** y existe solo para el
+  webhook de Vapi, que llega sin cookie. Todo acceso desde ahí va por
+  `scopedRepo(clinicId)`: es el único módulo que hay que auditar para saber que
+  no se cruzan datos.
+- Nunca uses el cliente admin en una página ni en una Server Action.
 
-## Preset A — "Organic Tech" (Clínica Boutique)
+### Secretos
 
-- _Identidad:_ Puente entre laboratorio de investigación biológica y revista de lujo avant-garde.
-- _Paleta:_ Musgo #2E4036, Arcilla #CC5833, Crema #F2F0E9, Carbón #1A1A1A.
-- _Tipografía:_ Títulos: "Plus Jakarta Sans" + "Outfit". Drama: "Cormorant Garamond" Italic. Datos: "IBM Plex Mono".
-- _Mood de Imagen:_ Bosque oscuro, texturas orgánicas, cristalería de laboratorio.
+- Solo `NEXT_PUBLIC_*` llega al navegador. `VAPI_API_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`, `ENCRYPTION_KEY`, `GOOGLE_CLIENT_SECRET` y
+  `VAPI_WEBHOOK_SECRET` son de servidor.
+- Los módulos de servidor importan `server-only`: si acaban en un bundle de
+  cliente, el build falla.
+- Los tokens de Google se guardan cifrados con AES-256-GCM (`lib/crypto/aes.ts`),
+  con AAD por clínica y por tipo de token.
 
-## Preset B — "Midnight Luxe" (Editorial Oscuro)
+### Autenticación
 
-- _Identidad:_ Club privado de miembros y atelier de relojería de alta gama.
-- _Paleta:_ Obsidiana #0D0D12, Champán #C9A84C, Marfil #FAF8F5, Pizarra #2A2A35.
-- _Tipografía:_ Títulos: "Inter". Drama: "Playfair Display" Italic. Datos: "JetBrains Mono".
-- _Mood de Imagen:_ Mármol oscuro, acentos dorados, sombras arquitectónicas.
+- El middleware de Next 16 se llama **proxy**: `proxy.ts` en la raíz. Un
+  `middleware.ts` no se ejecutaría y la sesión no se refrescaría.
+- En servidor se usa **`supabase.auth.getClaims()`**, nunca `getUser()` ni
+  `getSession()`: `getSession()` no revalida el token.
+- No pongas código entre `createServerClient` y `getClaims()` en el proxy.
 
-## Preset C — "Brutalist Signal" (Precisión Cruda)
+### Base de datos
 
-- _Identidad:_ Sala de control del futuro: pura densidad de información sin decoración.
-- _Paleta:_ Papel #E8E4DD, Rojo Señal #E63B2E, Blanco Roto #F5F3EE, Negro #111111.
-- _Tipografía:_ Títulos: "Space Grotesk". Drama: "DM Serif Display" Italic. Datos: "Space Mono".
-- _Mood de Imagen:_ Concreto, arquitectura brutalista, materiales crudos.
+- PK `bigint generated always as identity`. La única PK uuid es `profiles.id`,
+  impuesta por `auth.users`.
+- `timestamptz` siempre. `text` en vez de `varchar(n)`. `numeric` para dinero.
+- Índice en toda FK y en toda columna usada en una política RLS.
+- En las políticas, envuelve las funciones: `using ((select private.is_clinic_member(clinic_id)))`.
+  Sin el `select` se re-evalúan por fila.
+- `UPDATE` lleva `USING` **y** `WITH CHECK`, o un usuario puede mover la fila a otra clínica.
+- `ADD CONSTRAINT IF NOT EXISTS` no existe en Postgres: usa un bloque `DO $$`.
+- Nunca inventes el nombre de un archivo de migración: `pnpm dlx supabase migration new <nombre>`.
 
-## Preset D — "Vapor Clinic" (Biotecnología Neón)
+### Vapi
 
-- _Identidad:_ Laboratorio de secuenciación genómica en un club nocturno de Tokio.
-- _Paleta:_ Vacío Profundo #0A0A14, Plasma #7B61FF, Fantasma #F0EFF4, Grafito #18181B.
-- _Tipografía:_ Títulos: "Sora". Drama: "Instrument Serif" Italic. Datos: "Fira Code".
-- _Mood de Imagen:_ Bioluminiscencia, agua oscura, reflejos de neón.
+Las formas de la API están verificadas contra los tipos de `@vapi-ai/server-sdk`.
+No las cambies de memoria:
 
----
+- El webhook entrante trae `message.toolCallList[]`, con
+  `{ id, type, function: { name, arguments } }`, y **`arguments` es un string
+  JSON**: hay que parsearlo.
+- La respuesta es `{ results: [{ toolCallId, name, result }] }`. **`name` es
+  obligatorio**; sin él el turno del agente se corta.
+- El assistant no tiene `serverUrl`/`serverUrlSecret`: tiene
+  `server: { url, headers, credentialId, timeoutSeconds }`. **No existe
+  `server.secret`**; el secreto compartido viaja en `server.headers`.
+- `hipaaEnabled` vive en `compliancePlan`, no en la raíz, y exige plan Enterprise.
+- Para actualizar un assistant: `get` → deep-merge del `model` completo →
+  `update`. Nunca un `model` parcial escrito a mano.
+- Para actualizar un número: `get` primero y reenvía su `provider`, o la API
+  responde 400.
+- `name` del assistant ≤ 40 caracteres. Nombre de función: `^[a-zA-Z0-9_-]+$`.
+- El `clinicId` nunca es un parámetro visible al modelo: se deriva en el servidor.
 
-# Sistema de Diseño Fijo (NUNCA CAMBIAR)
+## Convenciones de código
 
-- _Textura Visual:_ Implementar un overlay global de ruido CSS usando un filtro SVG <feTurbulence> con opacidad 0.05.
-- _Contenedores:_ Usar radios de curvatura de rounded-[2rem] a rounded-[3rem]. Sin esquinas afiladas.
-- _Interacciones:_ Botones con sensación "magnética" (escala 1.03) y transiciones de color mediante capas <span> deslizantes.
-- _Animación:_ Usar gsap.context() dentro de useEffect para todas las animaciones, con power3.out para entradas.
+- Comentarios y textos de la interfaz en español. Identificadores en inglés
+  cuando son términos técnicos (`clinicId`, `toolCallId`), en español cuando son
+  de dominio (`clinica`, `cita`).
+- Nada de `any`: el lint lo rechaza. Los payloads externos se validan con Zod.
+- Cada vista maneja carga, vacío y error.
+- El agente no calcula fechas: la aritmética temporal vive en el servidor y se le
+  devuelve ya verbalizada.
 
----
+## Comandos
 
-# Arquitectura de Componentes
-
-1.  _HEADER:_ Contenedor tipo píldora, centrado y fijo. Transiciona de transparente a desenfoque de fondo al hacer scroll.
-2.  _HÉROE:_ Altura 100dvh, imagen a sangre con degradado a negro. Tipografía con gran contraste de escala entre sans negrita y serif itálica masiva.
-3.  _CARACTERÍSTICAS:_ Tres tarjetas con micro-UIs funcionales: un Shuffler de tarjetas, un Typewriter de telemetría y un Scheduler de protocolo con cursor animado.
-4.  _FILOSOPÍA:_ Fondo oscuro con textura orgánica en parallax. Contraste entre el enfoque común de la industria y el enfoque diferenciado de la marca.
-5.  _PROTOCOLO:_ Tarjetas de pantalla completa que se apilan y escalan mediante GSAP ScrollTrigger, incluyendo animaciones SVG únicas (hélices, láseres o formas de onda).
-6.  _FOOTER:_ Fondo oscuro profundo con bordes superiores redondeados y un indicador de estado del sistema operativo con punto verde pulsante.
-
----
-
-## Requisitos Técnicos
-
-- _Stack:_ React 19, Tailwind CSS v3.4.17, GSAP 3 (ScrollTrigger), Lucide React.
-- _Imágenes:_ URLs reales de Unsplash que coincidan con el imageMood del preset.
-- _Directiva Final:_ No construyas un sitio web; construye un instrumento digital. Erradica los patrones genéricos de IA.
+```bash
+pnpm dev          # desarrollo
+pnpm build        # build de producción
+pnpm typecheck    # tsc --noEmit
+pnpm lint         # ESLint (en Next 16 `next lint` ya no existe)
+pnpm test         # vitest
+pnpm db:reset     # aplica migraciones + seed en la base local (requiere Docker)
+pnpm db:types     # regenera lib/supabase/database.types.ts
+```
